@@ -5,7 +5,7 @@ import pandas as pd
 import plotly.express as px
 import numpy as np
 
-# --- Flawless and Detailed Simulation Code ---
+# --- Version 4: Extensive Debugging for Payment Queue Blocking ---
 class Config:
     def __init__(self, cars_per_hour, order_time, prep_time, payment_time, order_queue_capacity, payment_queue_capacity, simulation_time):
         self.CARS_PER_HOUR = cars_per_hour
@@ -31,9 +31,9 @@ class DriveThrough:
             'wait_times_payment_queue': [],
             'total_times': [],
             'cars_served': 0,
-            'cars_blocked_order_queue': 0, # Explicitly track order queue blocks
-            'cars_blocked_payment_queue': 0, # Explicitly track payment queue blocks
-            'cars_balked_initial': 0,      # Track initial balking events
+            'cars_blocked_order_queue': 0,
+            'cars_blocked_payment_queue': 0,
+            'cars_balked_initial': 0,
             'car_ids': [],
             'balking_events': [],
         }
@@ -54,7 +54,7 @@ class DriveThrough:
         if combined_queue_length >= combined_queue_capacity:
             if random.random() < 0.3:
                 print(f"Car {car_id} balked (initial - queues full) at {self.env.now:.2f}, Combined Queue Length: {combined_queue_length}, Capacity: {combined_queue_capacity}")
-                self.metrics['cars_balked_initial'] += 1 # Track initial balking
+                self.metrics['cars_balked_initial'] += 1
                 self.metrics['balking_events'][-1] = 1
                 return
 
@@ -63,57 +63,59 @@ class DriveThrough:
         if len(self.order_queue.items) >= self.config.ORDER_QUEUE_CAPACITY:
             print(f"Car {car_id} BLOCKED from order queue (full) at {self.env.now:.2f}, Order Queue Length: {len(self.order_queue.items)}, Capacity: {self.config.ORDER_QUEUE_CAPACITY}")
             self.metrics['cars_blocked_order_queue'] += 1
-            return  # Car blocked at order queue
+            return
         else:
             yield self.order_queue.put(car_id)
             self.metrics['wait_times_ordering_queue'][-1] = self.env.now - enter_order_queue_time
-            print(f"Car {car_id} entered order queue at {self.env.now:.2f}, Order Queue Length: {len(self.order_queue.items)}")
+            print(f"Car {car_id} entered order queue at {self.env.now:.2f}, Order Queue Length: {len(self.order_queue.items)}, Payment Queue Length: {len(self.payment_queue.items)}") # DEBUG - Payment queue length here too
 
         # --- Stage 2: Ordering ---
         with self.order_station.request() as request:
             yield request
             yield self.order_queue.get()
-            print(f"Car {car_id} began ordering at {self.env.now:.2f}")
+            print(f"Car {car_id} began ordering at {self.env.now:.2f}, Order Queue Length after get: {len(self.order_queue.items)}, Payment Queue Length: {len(self.payment_queue.items)}") # DEBUG - Queue lengths after order queue get
             order_start_time = self.env.now
 
             order_time = self.config.ORDER_TIME * random.uniform(0.9, 1.1)
             yield self.env.timeout(order_time)
-            print(f"Car {car_id} finished ordering at {self.env.now:.2f}")
+            print(f"Car {car_id} finished ordering at {self.env.now:.2f}, Order Queue Length: {len(self.order_queue.items)}, Payment Queue Length: {len(self.payment_queue.items)}") # DEBUG - Queue lengths after order timeout
 
         self.env.process(self.prep_order(car_id, car_id))
 
         # --- Stage 3: Payment Queue Entry ---
         enter_payment_queue_time = self.env.now
+        # DEBUG - Queue length right before payment queue check (CRITICAL DEBUG POINT)
+        print(f"Car {car_id} - Before Payment Queue Check - Order Queue Length: {len(self.order_queue.items)}, Payment Queue Length: {len(self.payment_queue.items)}, Capacity: {self.config.PAYMENT_QUEUE_CAPACITY}, Time: {self.env.now:.2f}")
         if len(self.payment_queue.items) >= self.config.PAYMENT_QUEUE_CAPACITY:
-            print(f"Car {car_id} BLOCKED from payment queue (full) at {self.env.now:.2f}, Payment Queue Length: {len(self.payment_queue.items)}, Capacity: {self.config.PAYMENT_QUEUE_CAPACITY}")
+            print(f"Car {car_id} BLOCKED from payment queue (full) at {self.env.now:.2f} - Payment Queue Length: {len(self.payment_queue.items)}, Capacity: {self.config.PAYMENT_QUEUE_CAPACITY}")
             self.metrics['cars_blocked_payment_queue'] += 1
-            yield self.payment_queue.cancel(car_id) # Explicitly remove from order_queue if blocked here - important for Store queues if blocking after entering
+            yield self.payment_queue.cancel(car_id) # Keep cancel - crucial for Store queues
             return  # Car blocked at payment queue
         else:
             yield self.payment_queue.put(car_id)
             self.metrics['wait_times_payment_queue'][-1] = self.env.now - enter_payment_queue_time
-            print(f"Car {car_id} entered payment queue at {self.env.now:.2f}, Payment Queue Length: {len(self.payment_queue.items)}")
+            print(f"Car {car_id} entered payment queue at {self.env.now:.2f}, Order Queue Length: {len(self.order_queue.items)}, Payment Queue Length: {len(self.payment_queue.items)}") # DEBUG - Queue lengths after payment queue put
 
         # --- Stage 4: Payment and Pickup ---
         with self.payment_window.request() as request:
             yield request
             yield self.payment_queue.get()
-            print(f"Car {car_id} began payment at {self.env.now:.2f}")
+            print(f"Car {car_id} began payment at {self.env.now:.2f}, Order Queue Length: {len(self.order_queue.items)}, Payment Queue Length: {len(self.payment_queue.items)}") # DEBUG - Queue lengths after payment queue get
             payment_start_time = self.env.now
 
             payment_time = self.config.PAYMENT_TIME * random.uniform(0.9, 1.1)
             yield self.env.timeout(payment_time)
-            print(f"Car {car_id} finished payment at {self.env.now:.2f}")
+            print(f"Car {car_id} finished payment at {self.env.now:.2f}, Order Queue Length: {len(self.order_queue.items)}, Payment Queue Length: {len(self.payment_queue.items)}") # DEBUG - Queue lengths after payment timeout
 
         # --- Stage 5: Wait for order prep ---
         yield self.order_ready_events[car_id]
         del self.order_ready_events[car_id]
-        print(f"Car {car_id} order ready at {self.env.now:.2f}")
+        print(f"Car {car_id} order ready at {self.env.now:.2f}, Order Queue Length: {len(self.order_queue.items)}, Payment Queue Length: {len(self.payment_queue.items)}") # DEBUG - Queue lengths after order ready
 
         # --- Completion ---
         self.metrics['total_times'][-1] = self.env.now - arrival_time
         self.metrics['cars_served'] += 1
-        print(f"Car {car_id} completed service at {self.env.now:.2f}")
+        print(f"Car {car_id} completed service at {self.env.now:.2f}, Order Queue Length: {len(self.order_queue.items)}, Payment Queue Length: {len(self.payment_queue.items)}") # DEBUG - Queue lengths at completion
 
 
     def prep_order(self, car_id, order):
@@ -184,20 +186,21 @@ def analyze_results(metrics, config):
     return results, fig_wait_order_queue, fig_wait_payment_queue, fig_total, df
 
 # --- Streamlit App ---
-st.set_page_config(page_title="Flawless Drive-Through Simulation", page_icon=":car:", layout="wide") # Updated title
-st.title("Flawless Drive-Through Simulation") # Updated title
+st.set_page_config(page_title="Flawless Drive-Through Simulation", page_icon=":car:", layout="wide")
+st.title("Flawless Drive-Through Simulation (DEBUGGING)") # More specific title
 st.write("""
 This app simulates a simplified single-lane drive-through service with robust queue blocking and detailed metrics.
 Adjust the parameters in the sidebar and click 'Run Simulation' to see the results.
-""")
+**DEBUGGING PRINTS ARE ACTIVE - CHECK CONSOLE FOR DETAILED SIMULATION OUTPUT.**
+""") # Added note about console output
 
 # --- Sidebar (Inputs) ---
 with st.sidebar:
     st.header("Simulation Parameters")
 
-    # Initialize session state variables
+    # Initialize with parameters to FORCE payment queue blocking
     if 'cars_per_hour' not in st.session_state:
-        st.session_state.cars_per_hour = 70.0
+        st.session_state.cars_per_hour = 70.0  # High arrival rate
     if 'order_time' not in st.session_state:
         st.session_state.order_time = 1.2
     if 'prep_time' not in st.session_state:
@@ -207,9 +210,9 @@ with st.sidebar:
     if 'order_queue_capacity' not in st.session_state:
         st.session_state.order_queue_capacity = 15
     if 'payment_queue_capacity' not in st.session_state:
-        st.session_state.payment_queue_capacity = 2
+        st.session_state.payment_queue_capacity = 1  # **VERY LOW capacity to force blocking**
     if 'simulation_time' not in st.session_state:
-        st.session_state.simulation_time = 60
+        st.session_state.simulation_time = 300   # **Increased simulation time**
 
     # Input widgets using session state
     cars_per_hour = st.number_input("Cars per Hour", min_value=1.0, max_value=200.0, value=st.session_state.cars_per_hour, step=1.0, format="%.1f", key="cars_per_hour")
@@ -233,12 +236,12 @@ if 'metrics' in locals():
         st.dataframe(df)
 
         # Display metrics in columns, including initial balking
-        col1, col2, col3, col4 = st.columns(4) # Added a column for balking
+        col1, col2, col3, col4 = st.columns(4)
         with col1:
             st.metric("Cars Served", results['Cars Served'])
             st.metric("Cars Blocked (Order Queue)", results['Cars Blocked (Order Queue)'])
             st.metric("Cars Blocked (Payment Queue)", results['Cars Blocked (Payment Queue)'])
-            st.metric("Cars Balked (Initial)", results['Cars Balked (Initial)']) # Display initial balking
+            st.metric("Cars Balked (Initial)", results['Cars Balked (Initial)'])
         with col2:
             st.metric("Throughput (cars/hour)", results['Throughput (cars/hour)'])
             st.metric("Avg Wait Ordering Queue (min)", results['Avg Wait Ordering Queue (min)'])
@@ -246,7 +249,6 @@ if 'metrics' in locals():
             st.metric("Avg Wait Payment Queue (min)", results['Avg Wait Payment Queue (min)'])
         with col4:
             st.metric("Avg Total Time (min)", results['Avg Total Time (min)'])
-
 
         st.plotly_chart(fig_wait_order_queue, use_container_width=True)
         st.plotly_chart(fig_wait_payment_queue, use_container_width=True)
