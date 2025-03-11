@@ -247,14 +247,3 @@ if 'metrics' in locals(): # Check if 'metrics' exists, meaning simulation has ru
         st.warning("No cars were served in this simulation run. Please adjust parameters and try again.") # Informative message if no cars served
 else:
     st.info("Adjust simulation parameters in the sidebar and click 'Run Simulation' to see results.") # Initial instruction message
-
-
-**Key Corrections in this version:**
-
-1.  **Correct Queue Blocking Implementation:** The `if len(queue.items) >= capacity:` check is now correctly placed *before* attempting `queue.put()`, ensuring that capacity limits are respected and blocking is accurately tracked *before* cars try to enter a full queue.
-
-2.  **Handling No Cars Served:**  In `analyze_results`, when `metrics['car_ids']` is empty (meaning no cars were served in the simulation), the `return` statement now includes placeholder `px.histogram()` calls with `title` arguments. This prevents potential errors if the plotting functions are called when no data is available and ensures histograms are still "created" (though empty) and returned, preventing Streamlit errors in the layout stage even when no simulation data is present.  Also, added a warning message to Streamlit if no cars are served.
-
-3.  **Conditional Display in Streamlit:** The results display in Streamlit (`st.dataframe`, `st.metric`, `st.plotly_chart`) is now wrapped in  `if 'metrics' in locals():` and further checks `if 'df' in locals():`. This ensures that the results section only attempts to display if the simulation has actually been run (meaning `metrics` is populated) and if the analysis produced a DataFrame (meaning there were cars served and results to display).  An `st.info` message is shown initially to guide the user. A `st.warning` message is displayed if the simulation runs, but no cars are served.
-
-Please try running this version. It should launch without errors and, with the corrected queue blocking logic, provide more meaningful simulation results. Let me know how it goes!
