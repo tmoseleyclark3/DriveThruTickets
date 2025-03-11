@@ -201,19 +201,19 @@ def analyze_results(metrics, config):
 
     return summary_results, fig_wait_order_queue, fig_wait_payment_queue, fig_total_time, df_metrics
 
-# --- Streamlit App ---
-st.set_page_config(page_title="Robust Drive-Through Simulation", page_icon=":car:", layout="wide") # Updated title
-st.title("Robust Drive-Through Simulation") # Updated title
+# --- Streamlit App (Modified for Parameter Update Debugging) ---
+st.set_page_config(page_title="Robust Drive-Through Simulation", page_icon=":car:", layout="wide")
+st.title("Robust Drive-Through Simulation (Parameter Update DEBUG)") # Updated title
 st.write("""
-This app simulates a drive-through service with robust queue blocking and detailed metrics.
-Adjust parameters in the sidebar and click 'Run Simulation'. **Check the console for detailed output.**
-""") # Added note about console
+This app simulates a drive-through service. **We are currently DEBUGGING parameter updates.**
+Adjust parameters in the sidebar and click 'Run Simulation'. **Check below if parameters are updated correctly.**
+""") # Modified description
 
 # --- Sidebar for Inputs ---
 with st.sidebar:
     st.header("Simulation Parameters")
 
-    # Initialize session state for parameters
+    # Initialize session state for parameters (if not already initialized)
     if 'cars_per_hour' not in st.session_state: st.session_state.cars_per_hour = 70.0
     if 'order_time' not in st.session_state: st.session_state.order_time = 1.2
     if 'prep_time' not in st.session_state: st.session_state.prep_time = 2.00
@@ -231,20 +231,40 @@ with st.sidebar:
     payment_queue_capacity = st.number_input("Payment Queue Capacity", min_value=1, max_value=100, value=st.session_state.payment_queue_capacity, step=1, key="payment_queue_capacity_input")
     simulation_time = st.number_input("Simulation Time (min)", min_value=1, max_value=1440, value=st.session_state.simulation_time, step=1, key="simulation_time_input")
 
-    if st.button("Run Simulation"):
-        # Create Config object from sidebar parameters
-        config = Config(cars_per_hour, order_time, prep_time, payment_time, order_queue_capacity, payment_queue_capacity, simulation_time)
-        metrics = run_simulation(config) # Run simulation
-        results, fig_wait_order_queue, fig_wait_payment_queue, fig_total_time, df_results = analyze_results(metrics, config) # Analyze results
+    run_button = st.button("Run Simulation") # Store button in a variable
 
-# --- Main area for Results Display ---
-st.header("Simulation Results")
+# --- Main area for Parameter Display and Results ---
+st.header("Current Simulation Parameters (for DEBUG)") # New section to display parameters
 
-if 'metrics' in locals(): # Check if simulation results exist
-    if 'df_results' in locals(): # Check if DataFrame results exist
-        st.dataframe(df_results) # Display raw DataFrame
+# Display parameters from session state in the main app area - DEBUGGING
+st.write("Parameters being used for simulation (taken from session state):")
+st.write(f"- Cars per Hour: {st.session_state.cars_per_hour}")
+st.write(f"- Order Time (min): {st.session_state.order_time}")
+st.write(f"- Prep Time (min): {st.session_state.prep_time}")
+st.write(f"- Payment Time (min): {st.session_state.payment_time}")
+st.write(f"- Order Queue Capacity: {st.session_state.order_queue_capacity}")
+st.write(f"- Payment Queue Capacity: {st.session_state.payment_queue_capacity}")
+st.write(f"- Simulation Time (min): {st.session_state.simulation_time}")
 
-        # Display summary metrics in columns
+st.header("Simulation Results") # Results section as before
+
+if run_button: # Check if the button is clicked
+    # **Explicitly get values from session state RIGHT BEFORE creating Config**
+    config = Config(
+        cars_per_hour = st.session_state.cars_per_hour,
+        order_time = st.session_state.order_time,
+        prep_time = st.session_state.prep_time,
+        payment_time = st.session_state.payment_time,
+        order_queue_capacity = st.session_state.order_queue_capacity,
+        payment_queue_capacity = st.session_state.payment_queue_capacity,
+        simulation_time = st.session_state.simulation_time
+    )
+    metrics = run_simulation(config)
+    results, fig_wait_order_queue, fig_wait_payment_queue, fig_total_time, df_results = analyze_results(metrics, config)
+
+    if 'df_results' in locals():
+        st.dataframe(df_results)
+
         col1, col2, col3, col4 = st.columns(4)
         with col1:
             st.metric("Cars Served", results['Cars Served'])
@@ -259,11 +279,10 @@ if 'metrics' in locals(): # Check if simulation results exist
         with col4:
             st.metric("Avg Total Time (min)", results['Avg Total Time (min)'])
 
-        # Display histograms
         st.plotly_chart(fig_wait_order_queue, use_container_width=True)
         st.plotly_chart(fig_wait_payment_queue, use_container_width=True)
         st.plotly_chart(fig_total_time, use_container_width=True)
-    else: # Message if no DataFrame results (e.g., no cars served)
+    else:
         st.warning("No cars were served in this simulation run. Adjust parameters and re-run.")
-else: # Initial message before simulation is run
+else:
     st.info("Set simulation parameters in the sidebar and click 'Run Simulation' to see results.")
