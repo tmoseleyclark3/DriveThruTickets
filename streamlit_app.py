@@ -5,7 +5,7 @@ import pandas as pd
 import plotly.express as px
 import numpy as np
 
-# --- Corrected and Simplified Simulation Code ---
+# --- Debugging and Corrected Simulation Code ---
 class Config:
     def __init__(self, cars_per_hour, order_time, prep_time, payment_time, order_queue_capacity, payment_queue_capacity, simulation_time):
         self.CARS_PER_HOUR = cars_per_hour
@@ -48,12 +48,13 @@ class DriveThrough:
         self.metrics['balking_events'].append(0)
 
         # --- Stage 0: Balking (Initial Queue Check) ---
-        if len(self.order_queue.items) + len(self.payment_queue.items) >= self.config.ORDER_QUEUE_CAPACITY + self.config.PAYMENT_QUEUE_CAPACITY:
-            if random.random() < 0.3:
-                print(f"Car {car_id} balked (initial) at {self.env.now}")
-                self.metrics['cars_blocked_order_queue'] += 1
-                self.metrics['balking_events'][-1] = 1
-                return
+        # Commenting out initial balking for debugging - let's ensure cars always try to enter
+        # if len(self.order_queue.items) + len(self.payment_queue.items) >= self.config.ORDER_QUEUE_CAPACITY + self.config.PAYMENT_QUEUE_CAPACITY:
+        #     if random.random() < 0.3:
+        #         print(f"Car {car_id} balked (initial) at {self.env.now}")
+        #         self.metrics['cars_blocked_order_queue'] += 1
+        #         self.metrics['balking_events'][-1] = 1
+        #         return
 
         # --- Stage 1: Order Queue Entry and Blocking Check ---
         enter_order_queue_time = self.env.now
@@ -81,8 +82,10 @@ class DriveThrough:
 
         # --- Stage 3: Payment Queue Entry and Blocking Check ---
         enter_payment_queue_time = self.env.now
+        # Debugging Prints - check queue length right before check
+        print(f"Car {car_id} - Before Payment Queue Check - Queue Length: {len(self.payment_queue.items)}, Capacity: {self.config.PAYMENT_QUEUE_CAPACITY}, Time: {self.env.now}") # DEBUG
         if len(self.payment_queue.items) >= self.config.PAYMENT_QUEUE_CAPACITY:
-            print(f"Car {car_id} blocked from payment queue (full) at {self.env.now}")
+            print(f"Car {car_id} BLOCKED from payment queue (full) at {self.env.now} - Queue Length: {len(self.payment_queue.items)}, Capacity: {self.config.PAYMENT_QUEUE_CAPACITY}") # DEBUG - confirm blocking happens
             self.metrics['cars_blocked_payment_queue'] += 1
             return
         else:
@@ -147,7 +150,7 @@ def analyze_results(metrics, config):
             'Avg Wait Ordering Queue (min)': 0.0,
             'Avg Wait Payment Queue (min)': 0.0,
             'Avg Total Time (min)': 0.0,
-        }, px.histogram(title='Distribution of Wait Times at Order Queue'), px.histogram(title='Distribution of Wait Times at Payment Queue'),px.histogram(title='Distribution of Total Time in System'), pd.DataFrame() # Added titles for histograms to prevent errors
+        }, px.histogram(title='Distribution of Wait Times at Order Queue'), px.histogram(title='Distribution of Wait Times at Payment Queue'),px.histogram(title='Distribution of Total Time in System'), pd.DataFrame()
 
     df = pd.DataFrame({
         'Car ID': metrics['car_ids'],
@@ -180,7 +183,7 @@ def analyze_results(metrics, config):
 
 # --- Streamlit App ---
 st.set_page_config(page_title="Simplified Drive-Through Simulation", page_icon=":car:", layout="wide")
-st.title("Simplified Drive-Through Simulation (Corrected Queue Blocking)")
+st.title("Simplified Drive-Through Simulation (Corrected Queue Blocking + Debug)") # Updated title
 st.write("""
 This app simulates a simplified single-lane drive-through service with corrected queue blocking.
 Adjust the parameters in the sidebar and click 'Run Simulation' to see the results.
@@ -223,8 +226,8 @@ with st.sidebar:
 # --- Main Area (Results) ---
 st.header("Simulation Results")
 
-if 'metrics' in locals(): # Check if 'metrics' exists, meaning simulation has run
-    if 'df' in locals(): # Check if 'df' exists, results are valid
+if 'metrics' in locals():
+    if 'df' in locals():
         st.dataframe(df)
 
         # Display metrics in columns
@@ -244,6 +247,6 @@ if 'metrics' in locals(): # Check if 'metrics' exists, meaning simulation has ru
         st.plotly_chart(fig_wait_payment_queue, use_container_width=True)
         st.plotly_chart(fig_total, use_container_width=True)
     else:
-        st.warning("No cars were served in this simulation run. Please adjust parameters and try again.") # Informative message if no cars served
+        st.warning("No cars were served in this simulation run. Please adjust parameters and try again.")
 else:
-    st.info("Adjust simulation parameters in the sidebar and click 'Run Simulation' to see results.") # Initial instruction message
+    st.info("Adjust simulation parameters in the sidebar and click 'Run Simulation' to see results.")
